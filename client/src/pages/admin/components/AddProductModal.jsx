@@ -20,52 +20,43 @@ import { IoMdClose } from "react-icons/io";
 import { LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
-import {  setLoading, setadminAddVehicleSuccess, setadminCrudError } from "../../../redux/adminSlices/adminDashboardSlice/StatusSlice";
+import {
+  setLoading,
+  setadminAddVehicleSuccess,
+  setadminCrudError,
+} from "../../../redux/adminSlices/adminDashboardSlice/StatusSlice";
 
+/* ------------------- data bootstrap ------------------- */
 export const fetchModelData = async (dispatch) => {
   try {
     const res = await fetch("/api/admin/getVehicleModels", {
       method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
     });
     if (res.ok) {
       const data = await res.json();
 
-      //getting models from data
-      const models = data
-        .filter((cur) => cur.type === "car")
-        .map((cur) => cur.model);
+      const models = data.filter((c) => c.type === "car").map((c) => c.model);
       dispatch(setModelData(models));
 
-      //getting comapnys from data
-      const brand = data
-        .filter((cur) => cur.type === "car")
-        .map((cur) => cur.brand);
-      const uniqueBrand = brand.filter((cur, index) => {
-        return brand.indexOf(cur) === index;
-      });
+      const brand = data.filter((c) => c.type === "car").map((c) => c.brand);
+      const uniqueBrand = brand.filter((cur, i) => brand.indexOf(cur) === i);
       dispatch(setCompanyData(uniqueBrand));
 
-      //getting locations from data
       const locations = data
-        .filter((cur) => cur.type === "location")
-        .map((cur) => cur.location);
+        .filter((c) => c.type === "location")
+        .map((c) => c.location);
       dispatch(setLocationData(locations));
 
-      //getting districts from data
       const districts = data
-        .filter((cur) => cur.type === "location")
-        .map((cur) => cur.district);
-      const uniqueDistricts = districts.filter((cur, idx) => {
-        return districts.indexOf(cur) === idx;
-      });
+        .filter((c) => c.type === "location")
+        .map((c) => c.district);
+      const uniqueDistricts = districts.filter(
+        (cur, i) => districts.indexOf(cur) === i
+      );
       dispatch(setDistrictData(uniqueDistricts));
 
-      //setting whole data
-      const wholeData = data.filter((cur) => cur.type === "location");
-      dispatch(setWholeData(wholeData));
+      dispatch(setWholeData(data.filter((c) => c.type === "location")));
     } else {
       return "no data found";
     }
@@ -74,90 +65,115 @@ export const fetchModelData = async (dispatch) => {
   }
 };
 
+/* ------------------- component ------------------- */
 const AddProductModal = () => {
-  const { register, handleSubmit, control , reset } = useForm();
+  // DEFAULT VALUES to keep all selects controlled from first render
+  const { register, handleSubmit, control, reset } = useForm({
+    defaultValues: {
+      company: "",
+      model: "",
+      fuelType: "",
+      carType: "",
+      Seats: "",
+      transmitionType: "",
+      vehicleLocation: "",
+      vehicleDistrict: "",
+      insurance_end_date: null,
+      Registeration_end_date: null,
+      polution_end_date: null,
+    },
+  });
+
   const navigate = useNavigate();
   const dispatch = useDispatch();
-  const { isAddVehicleClicked } = useSelector((state) => state.addVehicle);
+  const { isAddVehicleClicked } = useSelector((s) => s.addVehicle);
   const { modelData, companyData, locationData, districtData } = useSelector(
-    (state) => state.modelDataSlice
+    (s) => s.modelDataSlice
   );
-  const {loading} = useSelector(state => state.statusSlice)
+  const { loading } = useSelector((s) => s.statusSlice);
 
   useEffect(() => {
     fetchModelData(dispatch);
-    dispatch(addVehicleClicked(true))
-  }, []);
+    dispatch(addVehicleClicked(true));
+  }, [dispatch]);
+
+  // helper: safe ISO from dayjs | null
+  const toIso = (d) => (d && d.$d ? new Date(d.$d).toISOString() : "");
 
   const onSubmit = async (addData) => {
-   
     try {
-      const img = [];
-      for (let i = 0; i < addData.image.length; i++) {
-        img.push(addData.image[i]);
+      if (!addData.image || addData.image.length === 0) {
+        toast.error("Please attach at least one vehicle image");
+        return;
       }
+
       const formData = new FormData();
       formData.append("registeration_number", addData.registeration_number);
       formData.append("company", addData.company);
-      img.forEach((file) => {
-        formData.append(`image`, file); // Append each file with a unique key
-      });
+
+      // images (backend expects 'image')
+      Array.from(addData.image).forEach((file) => formData.append("image", file));
+
       formData.append("name", addData.name);
       formData.append("model", addData.model);
-      formData.append("title", addData.title);
-      formData.append("base_package", addData.base_package);
-      formData.append("price", addData.price);
-      formData.append("description", addData.description);
+      formData.append("title", addData.title ?? "");
+      formData.append("base_package", addData.base_package ?? "");
+      formData.append("price", addData.price ?? "");
+      formData.append("description", addData.description ?? "");
       formData.append("year_made", addData.year_made);
       formData.append("fuel_type", addData.fuelType);
       formData.append("seat", addData.Seats);
       formData.append("transmition_type", addData.transmitionType);
-      formData.append("insurance_end_date", addData.insurance_end_date.$d);
-      formData.append("registeration_end_date", addData.Registeration_end_date.$d);
-      formData.append("polution_end_date", addData.polution_end_date.$d);
+
+      // 🛠️ fixed: don’t use .$d; send ISO strings
+      formData.append("insurance_end_date", toIso(addData.insurance_end_date));
+      formData.append(
+        "registeration_end_date",
+        toIso(addData.Registeration_end_date)
+      );
+      formData.append("polution_end_date", toIso(addData.polution_end_date));
+
       formData.append("car_type", addData.carType);
       formData.append("location", addData.vehicleLocation);
-      formData.append("district", addData.vehicleDistrict
-      );
-   
+      formData.append("district", addData.vehicleDistrict);
 
-      let tostID;
-      if (formData) {
-        tostID = toast.loading("saving...", { position: "bottom-center" });
-        dispatch(setLoading(true))
-      }
+      let tostID = toast.loading("Saving…", { position: "bottom-center" });
+      dispatch(setLoading(true));
+
       const res = await fetch("/api/admin/addProduct", {
         method: "POST",
-        body:formData
+        body: formData,
       });
 
       if (!res.ok) {
-        toast.error("error");
+        toast.error("Error while saving");
         toast.dismiss(tostID);
-        dispatch(setLoading(false))
-      }
-      if (res.ok) {
-        dispatch(setadminAddVehicleSuccess(true));
-        toast.dismiss(tostID)
-        dispatch(setLoading(false))
+        dispatch(setLoading(false));
+        return;
       }
 
+      // success
+      dispatch(setadminAddVehicleSuccess(true));
+      toast.dismiss(tostID);
+      dispatch(setLoading(false));
+      dispatch(addVehicleClicked(false));
       reset();
+      navigate("/adminDashboard/allProduct");
     } catch (error) {
-      dispatch(setadminCrudError(true))
+      dispatch(setadminCrudError(true));
       console.log(error);
+      dispatch(setLoading(false));
     }
-    dispatch(addVehicleClicked(false));
-    navigate("/adminDashboard/allProduct");
   };
 
   const handleClose = () => {
+    dispatch(addVehicleClicked(false));
     navigate("/adminDashboard/allProduct");
   };
 
   return (
     <>
-    {loading  ? <Toaster/> : null }
+      <Toaster />
       {isAddVehicleClicked && (
         <div>
           <button onClick={handleClose} className="relative left-10 top-5">
@@ -165,6 +181,7 @@ const AddProductModal = () => {
               <IoMdClose style={{ fontSize: "30" }} />
             </div>
           </button>
+
           <form onSubmit={handleSubmit(onSubmit)}>
             <div className="bg-white -z-10 max-w-[1000px] mx-auto">
               <Box
@@ -172,18 +189,15 @@ const AddProductModal = () => {
                   "& .MuiTextField-root": {
                     m: 4,
                     width: "25ch",
-                    color: "black", // Set text color to black
-                    "& .MuiOutlinedInput-notchedOutline": {
-                      borderColor: "black", // Set outline color to black
-                    },
-                    "@media (max-width: 640px)": {
-                      width: "30ch",
-                    },
+                    color: "black",
+                    "& .MuiOutlinedInput-notchedOutline": { borderColor: "black" },
+                    "@media (max-width: 640px)": { width: "30ch" },
                   },
                 }}
                 noValidate
                 autoComplete="off"
               >
+                {/* --------- Row 1 --------- */}
                 <div>
                   <TextField
                     required
@@ -192,18 +206,24 @@ const AddProductModal = () => {
                     {...register("registeration_number")}
                   />
 
+                  {/* company */}
                   <Controller
                     control={control}
                     name="company"
                     render={({ field }) => (
                       <TextField
                         {...field}
+                        value={field.value ?? ""}
+                        onChange={field.onChange}
                         required
                         id="company"
                         select
                         label="Company"
-                        error={Boolean(field.value == "")}
+                        error={field.value === ""}
                       >
+                        <MenuItem value="">
+                          <em>Select company</em>
+                        </MenuItem>
                         {companyData.map((cur, idx) => (
                           <MenuItem value={cur} key={idx}>
                             {cur}
@@ -211,27 +231,28 @@ const AddProductModal = () => {
                         ))}
                       </TextField>
                     )}
-                  ></Controller>
-
-                  <TextField
-                    required
-                    id="name"
-                    label="name"
-                    {...register("name")}
                   />
 
+                  <TextField required id="name" label="name" {...register("name")} />
+
+                  {/* model */}
                   <Controller
                     control={control}
                     name="model"
                     render={({ field }) => (
                       <TextField
                         {...field}
+                        value={field.value ?? ""}
+                        onChange={field.onChange}
                         required
                         id="model"
                         select
                         label="Model"
-                        error={Boolean(field.value == "")}
+                        error={field.value === ""}
                       >
+                        <MenuItem value="">
+                          <em>Select model</em>
+                        </MenuItem>
                         {modelData.map((cur, idx) => (
                           <MenuItem value={cur} key={idx}>
                             {cur}
@@ -239,20 +260,11 @@ const AddProductModal = () => {
                         ))}
                       </TextField>
                     )}
-                  ></Controller>
+                  />
 
                   <TextField id="title" label="title" {...register("title")} />
-                  <TextField
-                    id="base_package"
-                    label="base_package"
-                    {...register("base_package")}
-                  />
-                  <TextField
-                    id="price"
-                    type="number"
-                    label="Price"
-                    {...register("price")}
-                  />
+                  <TextField id="base_package" label="base_package" {...register("base_package")} />
+                  <TextField id="price" type="number" label="Price" {...register("price")} />
 
                   <TextField
                     required
@@ -261,40 +273,54 @@ const AddProductModal = () => {
                     label="year_made"
                     {...register("year_made")}
                   />
+
+                  {/* fuel */}
                   <Controller
                     control={control}
                     name="fuelType"
                     render={({ field }) => (
                       <TextField
                         {...field}
+                        value={field.value ?? ""}
+                        onChange={field.onChange}
                         required
                         id="fuel_type"
                         select
                         label="Fuel type"
-                        error={Boolean(field.value == "")}
+                        error={field.value === ""}
                       >
-                        <MenuItem value={"petrol"}>petrol</MenuItem>
-                        <MenuItem value={"diesel"}>diesel</MenuItem>
-                        <MenuItem value={"electirc"}>electric</MenuItem>
-                        <MenuItem value={"hybrid"}>hybrid</MenuItem>
+                        <MenuItem value="">
+                          <em>Select fuel</em>
+                        </MenuItem>
+                        <MenuItem value="petrol">petrol</MenuItem>
+                        <MenuItem value="diesel">diesel</MenuItem>
+                        <MenuItem value="electirc">electirc</MenuItem>
+                        <MenuItem value="hybrid">hybrid</MenuItem>
                       </TextField>
                     )}
-                  ></Controller>
+                  />
                 </div>
 
+                {/* --------- Row 2 --------- */}
                 <div>
+                  {/* carType */}
                   <Controller
                     name="carType"
                     control={control}
                     render={({ field }) => (
                       <TextField
                         {...field}
+                        value={field.value ?? ""}
+                        onChange={field.onChange}
                         required
                         id="car_type"
                         select
                         label="Car Type"
-                        error={Boolean(field.value === "")} // Add error handling for empty value
+                        error={field.value === ""}
                       >
+                        <MenuItem value="">
+                          <em>Select type</em>
+                        </MenuItem>
                         <MenuItem value="sedan">Sedan</MenuItem>
                         <MenuItem value="suv">SUV</MenuItem>
                         <MenuItem value="hatchback">Hatchback</MenuItem>
@@ -302,55 +328,73 @@ const AddProductModal = () => {
                     )}
                   />
 
+                  {/* seats */}
                   <Controller
                     control={control}
                     name="Seats"
                     render={({ field }) => (
                       <TextField
                         {...field}
+                        value={field.value ?? ""}
+                        onChange={field.onChange}
                         required
                         id="seats"
                         select
                         label="Seats"
-                        error={Boolean(field.value === "")}
+                        error={field.value === ""}
                       >
-                        <MenuItem value={"5"}>5</MenuItem>
-                        <MenuItem value={"7"}>7</MenuItem>
-                        <MenuItem value={"8"}>8</MenuItem>
+                        <MenuItem value="">
+                          <em>Select seats</em>
+                        </MenuItem>
+                        <MenuItem value="5">5</MenuItem>
+                        <MenuItem value="7">7</MenuItem>
+                        <MenuItem value="8">8</MenuItem>
                       </TextField>
                     )}
-                  ></Controller>
+                  />
 
+                  {/* transmission */}
                   <Controller
                     control={control}
                     name="transmitionType"
                     render={({ field }) => (
                       <TextField
                         {...field}
+                        value={field.value ?? ""}
+                        onChange={field.onChange}
                         required
                         id="transmittion_type"
                         select
-                        label="transmittion_type"
-                        error={Boolean(field.value == "")}
+                        label="Transmission"
+                        error={field.value === ""}
                       >
-                        <MenuItem value={"automatic"}>automatic</MenuItem>
-                        <MenuItem value={"manual"}>manual</MenuItem>
+                        <MenuItem value="">
+                          <em>Select transmission</em>
+                        </MenuItem>
+                        <MenuItem value="automatic">automatic</MenuItem>
+                        <MenuItem value="manual">manual</MenuItem>
                       </TextField>
                     )}
-                  ></Controller>
+                  />
 
+                  {/* location */}
                   <Controller
                     control={control}
                     name="vehicleLocation"
                     render={({ field }) => (
                       <TextField
                         {...field}
+                        value={field.value ?? ""}
+                        onChange={field.onChange}
                         required
                         id="vehicleLocation"
                         select
-                        label="vehicleLocation"
-                        error={Boolean(field.value == "")}
+                        label="Vehicle Location"
+                        error={field.value === ""}
                       >
+                        <MenuItem value="">
+                          <em>Select location</em>
+                        </MenuItem>
                         {locationData.map((cur, idx) => (
                           <MenuItem value={cur} key={idx}>
                             {cur}
@@ -358,20 +402,26 @@ const AddProductModal = () => {
                         ))}
                       </TextField>
                     )}
-                  ></Controller>
+                  />
 
+                  {/* district */}
                   <Controller
                     control={control}
                     name="vehicleDistrict"
                     render={({ field }) => (
                       <TextField
                         {...field}
+                        value={field.value ?? ""}
+                        onChange={field.onChange}
                         required
                         id="vehicleDistrict"
                         select
-                        label="vehicleDistrict"
-                        error={Boolean(field.value == "")}
+                        label="Vehicle District"
+                        error={field.value === ""}
                       >
+                        <MenuItem value="">
+                          <em>Select district</em>
+                        </MenuItem>
                         {districtData.map((cur, idx) => (
                           <MenuItem value={cur} key={idx}>
                             {cur}
@@ -379,7 +429,7 @@ const AddProductModal = () => {
                         ))}
                       </TextField>
                     )}
-                  ></Controller>
+                  />
 
                   <TextField
                     id="description"
@@ -388,80 +438,58 @@ const AddProductModal = () => {
                     rows={4}
                     sx={{
                       width: "100%",
-                      "@media (min-width: 1280px)": {
-                        // for large screens (lg)
-                        minWidth: 565,
-                      },
+                      "@media (min-width: 1280px)": { minWidth: 565 },
                     }}
                     {...register("description")}
                   />
                 </div>
+
+                {/* --------- Dates & Images --------- */}
                 <div>
-                  <Controller
-                    name="insurance_end_date"
-                    control={control}
-                    render={({ field }) => (
-                      <LocalizationProvider dateAdapter={AdapterDayjs}>
+                  <LocalizationProvider dateAdapter={AdapterDayjs}>
+                    <Controller
+                      name="insurance_end_date"
+                      control={control}
+                      render={({ field }) => (
                         <DatePicker
-                          {...field}
                           label="Insurance end Date"
-                          inputFormat="MM/dd/yyyy" // Customize the date format as per your requirement
-                          value={field.value || null} // Ensure value is null if empty string or undefined
-                          onChange={(date) => field.onChange(date)}
-                          textField={(props) => <TextField {...props} />}
+                          value={field.value}
+                          onChange={(v) => field.onChange(v)}
                         />
-                      </LocalizationProvider>
-                    )}
-                  />
-
-                  <Controller
-                    control={control}
-                    name="Registeration_end_date"
-                    render={({ field }) => (
-                      <LocalizationProvider dateAdapter={AdapterDayjs}>
+                      )}
+                    />
+                    <Controller
+                      control={control}
+                      name="Registeration_end_date"
+                      render={({ field }) => (
                         <DatePicker
-                          {...field}
-                          label="registeration end Date"
-                          inputFormat="MM/dd/yyyy" // Customize the date format as per your requirement
-                          value={field.value || null} // Ensure value is null if empty string or undefined
-                          onChange={(date) => field.onChange(date)}
-                          textField={(props) => <TextField {...props} />}
+                          label="Registration end Date"
+                          value={field.value}
+                          onChange={(v) => field.onChange(v)}
                         />
-                      </LocalizationProvider>
-                    )}
-                  ></Controller>
-
-                  <Controller
-                    control={control}
-                    name="polution_end_date"
-                    render={({ field }) => (
-                      <LocalizationProvider dateAdapter={AdapterDayjs}>
+                      )}
+                    />
+                    <Controller
+                      control={control}
+                      name="polution_end_date"
+                      render={({ field }) => (
                         <DatePicker
-                          {...field}
-                          label="polution end Date "
-                          inputFormat="MM/dd/yyyy" // Customize the date format as per your requirement
-                          value={field.value || null} // Ensure value is null if empty string or undefined
-                          onChange={(date) => field.onChange(date)}
-                          textField={(props) => <TextField {...props} />}
+                          label="Pollution end Date"
+                          value={field.value}
+                          onChange={(v) => field.onChange(v)}
                         />
-                      </LocalizationProvider>
-                    )}
-                  ></Controller>
+                      )}
+                    />
+                  </LocalizationProvider>
 
-                  {/* editing for image is not done yet , default value for image is also not done yet */}
-
-                  {/* file upload section */}
-                  <div className="flex flex-col items-start justify-center lg:flex-row gap-10 lg:justify-between lg:items-start   ml-7 mt-10">
+                  {/* file upload */}
+                  <div className="flex flex-col items-start justify-center lg:flex-row gap-10 lg:justify-between lg:items-start ml-7 mt-10">
                     <div className="max-w-[300px] sm:max-w-[600px]">
-                      <label
-                        className="block mb-2 text-sm font-medium text-gray-900 "
-                        htmlFor="insurance_image"
-                      >
+                      <label className="block mb-2 text-sm font-medium text-gray-900" htmlFor="insurance_image">
                         Upload insurance image
                       </label>
                       <input
                         className="block w-full p-2 text-sm text-gray-50 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 dark:text-black focus:outline-none dark:bg-gray-200 dark:border-gray-600 dark:placeholder-gray-400"
-                        aria-describedby="user_avatar_help"
                         id="insurance_image"
                         type="file"
                         multiple
@@ -470,31 +498,24 @@ const AddProductModal = () => {
                     </div>
 
                     <div className="max-w-[300px] sm:max-w-[600px]">
-                      <label
-                        className="block mb-2 text-sm font-medium text-gray-900 "
-                        htmlFor="rc_book_image"
-                      >
+                      <label className="block mb-2 text-sm font-medium text-gray-900" htmlFor="rc_book_image">
                         Upload rc book image
                       </label>
                       <input
-                        className="block w-full p-2  text-sm text-gray-50 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 dark:text-black focus:outline-none dark:bg-gray-200 dark:border-gray-600 dark:placeholder-gray-400"
-                        aria-describedby="user_avatar_help"
+                        className="block w-full p-2 text-sm text-gray-50 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 dark:text-black focus:outline-none dark:bg-gray-200 dark:border-gray-600 dark:placeholder-gray-400"
                         id="rc_book_image"
                         type="file"
                         multiple
                         {...register("rc_book_image")}
                       />
                     </div>
+
                     <div className="max-w-[300px] sm:max-w-[600px]">
-                      <label
-                        className="block mb-2 text-sm font-medium text-gray-900 "
-                        htmlFor="polution_image"
-                      >
-                        Upload polution image
+                      <label className="block mb-2 text-sm font-medium text-gray-900" htmlFor="polution_image">
+                        Upload pollution image
                       </label>
                       <input
                         className="block w-full p-2 text-sm text-gray-50 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 dark:text-black focus:outline-none dark:bg-gray-200 dark:border-gray-600 dark:placeholder-gray-900"
-                        aria-describedby="user_avatar_help"
                         id="polution_image"
                         type="file"
                         multiple
@@ -503,25 +524,23 @@ const AddProductModal = () => {
                     </div>
 
                     <div className="max-w-[300px] sm:max-w-[600px]">
-                      <label
-                        className="block mb-2 text-sm font-medium text-gray-900 "
-                        htmlFor="image"
-                      >
+                      <label className="block mb-2 text-sm font-medium text-gray-900" htmlFor="image">
                         Upload vehicle image
                       </label>
                       <input
                         className="block w-full p-2 text-sm text-gray-50 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 dark:text-black focus:outline-none dark:bg-gray-200 dark:border-gray-600 dark:placeholder-gray-900"
-                        aria-describedby="user_avatar_help"
                         id="image"
                         type="file"
                         multiple
+                        required
                         {...register("image")}
                       />
                     </div>
                   </div>
                 </div>
+
                 <div className="mt-10 flex justify-start items-center ml-7 mb-10">
-                  <Button variant="contained"  type="submit">
+                  <Button variant="contained" type="submit">
                     Submit
                   </Button>
                 </div>

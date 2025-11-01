@@ -32,6 +32,12 @@ import AddProductModal from "./pages/admin/components/AddProductModal";
 import VendorAddProductModal from "./pages/vendor/Components/VendorAddVehilceModal";
 import CarNotFound from "./pages/user/CarNotFound";
 
+//new
+import TripPlanner from "./pages/user/TripPlanner";
+import ListingGenerator from "./pages/vendor/pages/ListingGenerator";
+import ReviewSummarizer from "./pages/admin/pages/ReviewSummarizer";
+
+
 function App() {
   return (
     <>
@@ -68,6 +74,7 @@ function App() {
             <Route path="/availableVehicles" element={<AvailableVehicles />} />
             <Route path="/checkoutPage" element={<CheckoutPage />} />
             <Route path="/razorpay" element={<Razorpay />} />
+            <Route path="/trip-planner" element={<TripPlanner />} />
           </Route>
 
           {/* vendor private routes */}
@@ -82,9 +89,10 @@ function App() {
               element={<VendorDeleteVehicleModal />}
             />
             <Route
-              path="vendorDashboard/vendorAddProduct"
+              path="/vendorDashboard/vendorAddProduct"
               element={<VendorAddProductModal />}
             />
+             <Route path="/vendorDashboard/listingGenerator" element={<ListingGenerator />} />
           </Route>
 
           {/* admin private routes */}
@@ -101,6 +109,7 @@ function App() {
                 path="/adminDashboard/addProducts"
                 element={<AddProductModal />}
               />
+              <Route path="/adminDashboard/reviewSummarizer" element={<ReviewSummarizer />} />
             </Route>
           </Route>
         </Routes>
