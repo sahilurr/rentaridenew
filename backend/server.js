@@ -1,10 +1,11 @@
+import dotenv from 'dotenv';
 import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import dotenv from 'dotenv';
+
 
 import { cloudinaryConfig } from './utils/cloudinaryConfig.js';
 import userRoute from './routes/userRoute.js';

@@ -1,142 +1,101 @@
-import { errorHandler } from "../utils/error.js";
+// backend/controllers/aiController.js
 
 
-/*
- * AI Controller
- *
- * This controller exposes three endpoints for generative AI features:
- * 1. tripPlanner – Generates a suggested itinerary and vehicle recommendation
- *    given a destination and trip duration.
- * 2. listingGenerator – Generates a persuasive listing description for a
- *    vehicle based on basic facts supplied by the vendor.
- * 3. reviewSummarizer – Summarizes all reviews for a particular vendor.
- *
- * These endpoints call the Google Generative AI API (Gemini 1.0) via
- * HTTP POST requests. You must set the GEMINI_API_KEY environment
- * variable in your .env file for these calls to succeed.
- */
+// Do NOT call dotenv.config() here with default path;
+// your server.js already loads backend/.env correctly with an explicit path.
+// The key point: don't cache API key at module scope!
 
-const GEMINI_URL =
-  'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.0-pro:generateContent';
+const ENV_MODEL = (process.env.GEMINI_MODEL || "").trim();
+const FALLBACK_MODELS = [
+  ...(ENV_MODEL ? [ENV_MODEL] : []),
+  "gemini-1.5-flash",
+  "gemini-1.5-flash-8b",
+  "gemini-1.5-flash-latest",
+  "gemini-1.5-flash-8b-latest",
+];
 
-/**
- * Helper to invoke Gemini with a free‑form prompt. Returns the first
- * candidate text or throws an error.
- * @param {string} prompt
- */
-async function callGemini(prompt) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error('GEMINI_API_KEY not configured');
+async function callGeminiText(model, prompt) {
+  // read at call time so it works regardless of import order
+  const API_KEY = process.env.GEMINI_API_KEY;
+  if (!API_KEY) {
+    throw new Error(
+      "GEMINI_API_KEY missing — add it to backend/.env and restart the server"
+    );
   }
-  const res = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [
-        {
-          role: 'user',
-          parts: [{ text: prompt }],
-        },
-      ],
-    }),
+
+  const url =
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${API_KEY}`;
+
+  const r = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
   });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Gemini API error: ${res.status} ${text}`);
+
+  const json = await r.json();
+  if (!r.ok) {
+    const err = new Error(json?.error?.message || JSON.stringify(json));
+    err.status = r.status;
+    err.payload = json;
+    throw err;
   }
-  const data = await res.json();
-  const candidates = data.candidates || [];
-  if (!candidates.length) {
-    throw new Error('No content returned from Gemini');
-  }
-  const content = candidates[0].content;
-  if (!content || !content.parts || !content.parts.length) {
-    throw new Error('Malformed Gemini response');
-  }
-  return content.parts[0].text;
+  return json?.candidates?.[0]?.content?.parts?.[0]?.text ?? "No content";
 }
 
-/**
- * POST /api/ai/trip-planner
- *
- * Body: { destination: string, duration: number }
- *
- * Responds with a JSON object containing an itinerary suggestion and
- * a recommended vehicle type.
- */
-export const tripPlanner = async (req, res, next) => {
-  try {
-    const { destination, duration } = req.body;
-    if (!destination || !duration) {
-      return next(errorHandler(400, 'Destination and duration are required'));
+async function tryModels(prompt) {
+  const tried = [];
+  for (const m of FALLBACK_MODELS) {
+    tried.push(m);
+    try {
+      const text = await callGeminiText(m, prompt);
+      return { text, model: m };
+    } catch (e) {
+      if (e.status !== 404) throw new Error(`Gemini API error on "${m}": ${e.message}`);
+      // 404 => try next model
     }
-    const prompt =
-      `I am planning a ${duration}-day trip to ${destination}. ` +
-      `Please provide a detailed day-by-day itinerary including major attractions, dining recommendations, and approximate driving distances. ` +
-      `Also recommend the best type of vehicle for this trip (e.g., convertible, SUV, sedan).`;
-    const result = await callGemini(prompt);
-    res.status(200).json({ message: result });
-  } catch (error) {
-    next(errorHandler(500, error.message));
+  }
+  throw new Error(`No compatible Gemini model found. Tried: ${tried.join(", ")}`);
+}
+
+export const tripPlanner = async (req, res) => {
+  try {
+    const { destination = "your city", duration, days } = req.body;
+    const tripDays = Number(duration ?? days ?? 1);
+
+    const prompt = `Plan a ${tripDays}-day itinerary for ${destination}.
+Include day-wise bullets and recommend the best vehicle type at the end.`;
+
+    const { text, model } = await tryModels(prompt);
+    res.json({ ok: true, model, message: text });
+  } catch (err) {
+    res.status(400).json({ ok: false, message: `Gemini API error: ${err.message}` });
   }
 };
 
-/**
- * POST /api/ai/listing-generator
- *
- * Body: {
- *   brand: string,
- *   model: string,
- *   year: number,
- *   fuel: string,
- *   seats: number,
- *   transmission: string
- * }
- *
- * Responds with a JSON object containing a persuasive description.
- */
-export const listingGenerator = async (req, res, next) => {
+export const listingGenerator = async (req, res) => {
   try {
-    const { brand, model, year, fuel, seats, transmission } = req.body;
-    if (!brand || !model || !year) {
-      return next(errorHandler(400, 'Brand, model and year are required'));
-    }
-    const prompt =
-      `Write a persuasive and friendly description for a rental vehicle given the following facts:\n` +
-      `Brand: ${brand}\nModel: ${model}\nYear: ${year}\nFuel: ${fuel || 'N/A'}\nSeats: ${seats || 'N/A'}\nTransmission: ${transmission || 'N/A'}\n` +
-      `Highlight unique selling points, comfort features, and why a renter would love to choose this vehicle. Keep it under 150 words.`;
-    const description = await callGemini(prompt);
-    res.status(200).json({ description });
-  } catch (error) {
-    next(errorHandler(500, error.message));
+    const { facts } = req.body;
+    const prompt = `Write a persuasive 5–7 line rental listing for this vehicle:
+${typeof facts === "string" ? facts : JSON.stringify(facts, null, 2)}
+Tone: friendly, specific, include use-cases. End with a short CTA.`;
+
+    const { text, model } = await tryModels(prompt);
+    res.json({ ok: true, model, message: text });
+  } catch (err) {
+    res.status(400).json({ ok: false, message: `Gemini API error: ${err.message}` });
   }
 };
 
-/**
- * POST /api/ai/review-summarizer
- *
- * Body: { vendorId: string, reviews: string[] }
- *
- * If reviews are not provided, the controller should fetch them from the
- * database. For simplicity, the current implementation expects
- * an array of review texts. It returns a concise summary highlighting
- * the overall sentiment, key praises, and concerns.
- */
-export const reviewSummarizer = async (req, res, next) => {
+export const reviewSummarizer = async (req, res) => {
   try {
-    const { vendorId, reviews } = req.body;
-    if (!reviews || !Array.isArray(reviews) || reviews.length === 0) {
-      return next(errorHandler(400, 'No reviews provided'));
-    }
-    const concatenated = reviews.join('\n');
-    const prompt =
-      `Summarize the following rental vehicle reviews for vendor ${vendorId}:\n` +
-      `${concatenated}\n` +
-      `Provide an overall sentiment score (positive, neutral, or negative) and highlight recurring themes in a short paragraph.`;
-    const summary = await callGemini(prompt);
-    res.status(200).json({ summary });
-  } catch (error) {
-    next(errorHandler(500, error.message));
+    const { reviews = [] } = req.body;
+    const list = reviews.map((r, i) => `- ${i + 1}. ${r}`).join("\n");
+    const prompt = `Summarize these reviews into 6–8 bullets with positives, negatives, and red flags:
+${list}`;
+
+    const { text, model } = await tryModels(prompt);
+    res.json({ ok: true, model, message: text });
+  } catch (err) {
+    res.status(400).json({ ok: false, message: `Gemini API error: ${err.message}` });
   }
 };
