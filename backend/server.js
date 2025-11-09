@@ -24,6 +24,8 @@ const app = express();
 // ---------- GLOBAL MIDDLEWARE (must be BEFORE routes) ----------
 const allowedOrigins = [
   'http://localhost:5173',
+  'https://car-go-frontend.onrender.com',
+  
   'https://rent-a-ride-two.vercel.app',
 ];
 
